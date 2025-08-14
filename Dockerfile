@@ -1,5 +1,5 @@
 # Base image
-FROM node:20
+FROM --platform=linux/amd64 node:20
 
 # Create app directory
 WORKDIR /app
