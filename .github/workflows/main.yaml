@@ -34,44 +34,127 @@ jobs:
             docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
             docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
   
-  deploy:
-    name: Deploy to EC2
-    runs-on: ubuntu-latest
-    needs: build-and-push-to-ecr
-    steps:
-        - name: Configure AWS Credentials
-          uses: aws-actions/configure-aws-credentials@v4
-          with:
+  # deploy:
+  #   name: Deploy to EC2
+  #   runs-on: ubuntu-latest
+  #   needs: build-and-push-to-ecr
+  #   steps:
+  #       - name: Configure AWS Credentials
+  #         uses: aws-actions/configure-aws-credentials@v4
+  #         with:
+  #           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  #           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  #           aws-region: ${{secrets.AWS_REGION}}
+
+  #       - name: Login to AWS ECR
+  #         id: login-aws-ecr
+  #         uses: aws-actions/amazon-ecr-login@v2
+
+  #       - name: Deploy to EC2
+  #         run: |
+  #           command_id=$(aws ssm send-command \
+  #           --document-name "AWS-RunShellScript" \
+  #           --targets "Key=instanceIds,Values=i-0ac654832a8d258d6,i-0061ae24765319f20" \
+  #           --comment "Pull Docker image and run it on EC2 instance" \
+  #           --parameters '{"commands":["aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS      --password-stdin ${{ steps.login-aws-ecr.outputs.registry }}","docker pull ${{ steps.login-aws-ecr.outputs.registry }}/${{ secrets.AWS_ECR_REPO }}:latest","docker stop my-container || true","docker rm my-container || true","docker run -d --name my-container -p 3000:3000 ${{ steps.login-aws-ecr.outputs.registry }}/${{ secrets.AWS_ECR_REPO }}:latest"]}' --query "Command.CommandId" --output text)
+
+  #           echo "Command ID: $command_id"
+
+  #           aws ssm wait command-executed \
+  #           --command-id "$command_id" \
+  #           --instance-id "i-0ac654832a8d258d6" \
+  #           --region ${{ secrets.AWS_REGION }}
+
+  #           status=$(aws ssm list-commands --command-id "$command_id" --query "Commands[0].Status" --output text) || true
+
+  #           echo "$status"
+
+  #            if [ "$status" != "Success" ]; then
+  #           echo "❌ Deployment failed with status: $status"
+  #           exit 1
+  #           fi
+
+  #           echo "✅ Deployment succeeded!"
+
+       deploy:
+        name: Deploy to EC2
+        runs-on: ubuntu-latest
+        needs: build-and-push-to-ecr
+        steps:
+          - name: Configure AWS Credentials
+            uses: aws-actions/configure-aws-credentials@v4
+            with:
             aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
             aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
             aws-region: ${{secrets.AWS_REGION}}
 
-        - name: Login to AWS ECR
-          id: login-aws-ecr
-          uses: aws-actions/amazon-ecr-login@v2
-
-        - name: Deploy to EC2
+          - name: Login to AWS ECR
+            id: login-aws-ecr
+            uses: aws-actions/amazon-ecr-login@v2
+          
+          - name: Deploy to EC2
           run: |
+            INSTANCES=("i-0ac654832a8d258d6" "i-0061ae24765319f20")
+
+            # 1. Send the command and capture Command ID
             command_id=$(aws ssm send-command \
-            --document-name "AWS-RunShellScript" \
-            --targets "Key=instanceIds,Values=i-0ac654832a8d258d6,i-0061ae24765319f20" \
-            --comment "Pull Docker image and run it on EC2 instance" \
-            --parameters '{"commands":["aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS      --password-stdin vgsdvffdbdb","docker pull ${{ steps.login-aws-ecr.outputs.registry }}/${{ secrets.AWS_ECR_REPO }}:latest","docker stop my-container || true","docker rm my-container || true","docker run -d --name my-container -p 3000:3000 ${{ steps.login-aws-ecr.outputs.registry }}/${{ secrets.AWS_ECR_REPO }}:latest"]}' --query "Command.CommandId" --output text)
+              --document-name "AWS-RunShellScript" \
+              --targets "Key=instanceIds,Values=${INSTANCES[*]}" \
+              --comment "Pull Docker image and run it on EC2 instances" \
+              --parameters '{"commands":["aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS        --password-stdin vgsdvffdbdb","docker pull ${{ steps.login-aws-ecr.outputs.registry }}/${{ secrets.AWS_ECR_REPO }}      :latest","docker stop my-container || true","docker rm my-container || true","docker run -d --name my-container -p        3000:3000 ${{ steps.login-aws-ecr.outputs.registry }}/${{ secrets.AWS_ECR_REPO }}:latest"]}' \
+             --query "Command.CommandId" \
+             --output text)
 
             echo "Command ID: $command_id"
 
-            aws ssm wait command-executed \
-            --command-id "$command_id" \
-            --instance-id "i-0ac654832a8d258d6" \
-            --region ${{ secrets.AWS_REGION }}
+            # 2. Wait for all instances to finish execution
+            for instance in "${INSTANCES[@]}"; do
+              echo "⏳ Waiting for command on $instance ..."
+             aws ssm wait command-executed \
+               --command-id "$command_id" \
+               --instance-id "$instance" \
+                --region ${{ secrets.AWS_REGION }}
+            done
 
-            status=$(aws ssm list-commands --command-id "$command_id" --query "Commands[0].Status" --output text) || true
+            # 3. Check results per instance with per-command logs
+            overall_status="Success"
 
-            echo "$status"
+            for instance in "${INSTANCES[@]}"; do
+             echo "🔍 Fetching results for $instance ..."
+              invocation=$(aws ssm list-command-invocations \
+                --command-id "$command_id" \
+                --instance-id "$instance" \
+                --details \
+                --region ${{ secrets.AWS_REGION }})
 
-             if [ "$status" != "Success" ]; then
-            echo "❌ Deployment failed with status: $status"
-            exit 1
+              status=$(echo "$invocation" | jq -r '.CommandInvocations[0].Status')
+
+              echo "➡️ Instance: $instance"
+              echo "   Overall Status : $status"
+              echo "   ---------------- Commands ----------------"
+
+             # Loop through each executed command
+             echo "$invocation" | jq -c '.CommandInvocations[0].CommandPlugins[]' | while read -r plugin; do
+               cmd_status=$(echo "$plugin" | jq -r '.Status')
+                output=$(echo "$plugin" | jq -r '.Output')
+               name=$(echo "$plugin" | jq -r '.Name')
+
+                echo "   🔹 Command: $name"
+                echo "      Status : $cmd_status"
+                echo "      Output :"
+               echo "$output" | sed 's/^/         /'
+                echo "   -----------------------------------------"
+              done
+
+              if [ "$status" != "Success" ]; then
+                overall_status="Failed"
+              fi
+            done
+
+            # 4. Fail the job if any instance failed
+            if [ "$overall_status" != "Success" ]; then
+             echo "❌ Deployment failed on one or more instances"
+             exit 1
             fi
 
-            echo "✅ Deployment succeeded!"
+            echo "✅ Deployment succeeded on all instances!"
