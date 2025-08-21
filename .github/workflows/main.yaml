@@ -56,7 +56,6 @@ jobs:
           env:
             INSTANCE_ID_1: ${{ secrets.INSTANCE_ID_1 }}
             INSTANCE_ID_2: ${{ secrets.INSTANCE_ID_2 }}
-            CONTAINER_NAME: ${{ vars.CONTAINER_NAME }}
           run: |
             INSTANCES=("$INSTANCE_ID_1" "$INSTANCE_ID_2")
             INSTANCE_LIST=$(IFS=, ; echo "${INSTANCES[*]}")
