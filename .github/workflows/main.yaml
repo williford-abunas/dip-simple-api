@@ -60,10 +60,9 @@ jobs:
             command_id=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --targets "Key=instanceIds,Values=$INSTANCE_LIST" \
-             --comment "Pull Docker image and run it on EC2 instances" \
-            --parameters '{"commands":["aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS  --password-stdin ${{ steps.login-aws-ecr.outputs.registry }}","docker pull ${{ steps.login-aws-ecr.outputs.registry }}/${{ secrets.AWS_ECR_REPO }} :latest","docker stop my-container || true","docker rm my-container || true","docker run -d --name my-container -p   3000:3000 ${{ steps.login-aws-ecr.outputs.registry }}/${{ secrets.AWS_ECR_REPO }}:latest"]}' \
-            --query "Command.CommandId" \
-             --output text)
+            --comment "Pull Docker image and run it on EC2 instances" \
+            --parameters '{"commands":["aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS  --password-stdin ${{ steps.login-aws-ecr.outputs.registry }}","docker pull ${{ steps.login-aws-ecr.outputs.registry }}/${{ secrets.AWS_ECR_REPO }}:latest","docker stop my-container || true","docker rm my-container || true","docker run -d --name my-container -p 3000:3000 ${{ steps.login-aws-ecr.outputs.registry }}/${{ secrets.AWS_ECR_REPO }}:latest"]}' \
+            --query "Command.CommandId" --output text)
 
              echo "Command ID: $command_id"
 
@@ -71,36 +70,36 @@ jobs:
              echo "⏳ Waiting for command on $instance ..."
               aws ssm wait command-executed \
               --command-id "$command_id" \
-             --instance-id "$instance" \
+              --instance-id "$instance" \
               --region ${{ secrets.AWS_REGION }}
               done
 
              overall_status="Success"
 
-            for instance in "${INSTANCES[@]}"; do
-            echo "🔍 Fetching results for $instance ..."
-            invocation=$(aws ssm list-command-invocations \
-            --command-id "$command_id" \
-             --instance-id "$instance" \
-             --details \
+              for instance in "${INSTANCES[@]}"; do
+              echo "🔍 Fetching results for $instance ..."
+              invocation=$(aws ssm list-command-invocations \
+              --command-id "$command_id" \
+              --instance-id "$instance" \
+              --details \
               --region ${{ secrets.AWS_REGION }})
 
             status=$(echo "$invocation" | jq -r '.CommandInvocations[0].Status')
 
-            echo "➡️ Instance: $instance"
-             echo "   Overall Status : $status"
-             echo "   ---------------- Commands ----------------"
+              echo "➡️ Instance: $instance"
+              echo "   Overall Status : $status"
+              echo "   ---------------- Commands ----------------"
 
-            echo "$invocation" | jq -c '.CommandInvocations[0].CommandPlugins[]' | while read -r plugin; do
+              echo "$invocation" | jq -c '.CommandInvocations[0].CommandPlugins[]' | while read -r plugin; do
               cmd_status=$(echo "$plugin" | jq -r '.Status')
-             output=$(echo "$plugin" | jq -r '.Output')
-             name=$(echo "$plugin" | jq -r '.Name')
+              output=$(echo "$plugin" | jq -r '.Output')
+              name=$(echo "$plugin" | jq -r '.Name')
 
-             echo "   🔹 Command: $name"
-             echo "      Status : $cmd_status"
-             echo "      Output :"
+              echo "   🔹 Command: $name"
+              echo "      Status : $cmd_status"
+              echo "      Output :"
               echo "$output" | sed 's/^/         /'
-            echo "   -----------------------------------------"
+              echo "   -----------------------------------------"
              done
 
              if [ "$status" != "Success" ]; then
