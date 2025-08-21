@@ -54,7 +54,7 @@ jobs:
 
         - name: Deploy to EC2
           run: |
-            INSTANCES=("i-0ac654832a8d258d6" "i-0061ae24765319f20")
+            INSTANCE_LIST=$(IFS=, ; echo "${INSTANCES[*]}")
 
             command_id=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
