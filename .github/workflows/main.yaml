@@ -77,7 +77,7 @@ jobs:
 
              overall_status="Success"
 
-            for instance in "$INSTANCE_LIST"; do
+            for instance in "${INSTANCES[@]}"; do
             echo "🔍 Fetching results for $instance ..."
             invocation=$(aws ssm list-command-invocations \
             --command-id "$command_id" \
