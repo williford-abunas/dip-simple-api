@@ -67,7 +67,7 @@ jobs:
 
              echo "Command ID: $command_id"
 
-             for instance in "$INSTANCE_LIST"; do
+             for instance in "${INSTANCES[@]}"; do
              echo "⏳ Waiting for command on $instance ..."
               aws ssm wait command-executed \
               --command-id "$command_id" \
