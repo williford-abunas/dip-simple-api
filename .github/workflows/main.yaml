@@ -54,11 +54,12 @@ jobs:
 
         - name: Deploy to EC2
           run: |
+            INSTANCES=("i-0ac654832a8d258d6" "i-0061ae24765319f20")
             INSTANCE_LIST=$(IFS=, ; echo "${INSTANCES[*]}")
 
             command_id=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
-            --targets "Key=instanceIds,Values=${INSTANCES[*]}" \
+            --targets "Key=instanceIds,Values=$INSTANCE_LIST" \
              --comment "Pull Docker image and run it on EC2 instances" \
             --parameters '{"commands":["aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS  --password-stdin vgsdvffdbdb","docker pull ${{ steps.login-aws-ecr.outputs.registry }}/${{ secrets.AWS_ECR_REPO }} :latest","docker stop my-container || true","docker rm my-container || true","docker run -d --name my-container -p   3000:3000 ${{ steps.login-aws-ecr.outputs.registry }}/${{ secrets.AWS_ECR_REPO }}:latest"]}' \
             --query "Command.CommandId" \
@@ -66,7 +67,7 @@ jobs:
 
              echo "Command ID: $command_id"
 
-             for instance in "${INSTANCES[@]}"; do
+             for instance in "$INSTANCE_LIST"; do
              echo "⏳ Waiting for command on $instance ..."
               aws ssm wait command-executed \
               --command-id "$command_id" \
@@ -76,7 +77,7 @@ jobs:
 
              overall_status="Success"
 
-            for instance in "${INSTANCES[@]}"; do
+            for instance in "$INSTANCE_LIST"; do
             echo "🔍 Fetching results for $instance ..."
             invocation=$(aws ssm list-command-invocations \
             --command-id "$command_id" \
