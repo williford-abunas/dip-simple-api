@@ -90,7 +90,7 @@ jobs:
               --details \
               --region ${{ secrets.AWS_REGION }})
 
-            status=$(echo "$invocation" | jq -r '.CommandInvocations[0].Status')
+              status=$(echo "$invocation" | jq -r '.CommandInvocations[0].Status')
 
               echo "➡️ Instance: $instance"
               echo "   Overall Status : $status"
