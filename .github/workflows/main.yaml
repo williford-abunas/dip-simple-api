@@ -57,8 +57,14 @@ jobs:
             INSTANCE_ID_1: ${{ secrets.INSTANCE_ID_1 }}
             INSTANCE_ID_2: ${{ secrets.INSTANCE_ID_2 }}
           run: |
-            INSTANCES=("$INSTANCE_ID_1" "$INSTANCE_ID_2")
-            INSTANCE_LIST=$(IFS=, ; echo "${INSTANCES[*]}")
+            INSTANCE_LIST="$INSTANCE_ID_1,$INSTANCE_ID_2"
+            echo "INSTANCE_LIST: $INSTANCE_LIST"
+    
+            IFS=',' read -ra INSTANCES <<< "$INSTANCE_LIST"
+    
+            echo "Number of instances: ${#INSTANCES[@]}"
+            echo "Instance 1: ${INSTANCES[0]}"
+            echo "Instance 2: ${INSTANCES[1]}"
 
             command_id=$(aws ssm send-command \
             --document-name "AWS-RunShellScript" \
@@ -66,11 +72,6 @@ jobs:
             --comment "Pull Docker image and run it on EC2 instances" \
             --parameters '{"commands":["aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS  --password-stdin ${{ steps.login-aws-ecr.outputs.registry }}","docker pull ${{ steps.login-aws-ecr.outputs.registry }}/${{ secrets.AWS_ECR_REPO }}:latest","docker stop ${{ vars.CONTAINER_NAME }} || true","docker rm ${{ vars.CONTAINER_NAME }} || true","docker run -d --name ${{ vars.CONTAINER_NAME }} -p 3000:3000 ${{ steps.login-aws-ecr.outputs.registry }}/${{ secrets.AWS_ECR_REPO }}:latest"]}' \
             --query "Command.CommandId" --output text)
-
-             echo "Command ID: $command_id"
-             echo "INSTANCE_LIST: $INSTANCE_LIST"
-             echo "INSTANCES: ${INSTANCES[@]}"
-             echo "$CONTAINER_NAME"
 
              for instance in "${INSTANCES[@]}"; do
              echo "⏳ Waiting for command on $instance ..."
