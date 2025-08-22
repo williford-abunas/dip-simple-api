@@ -70,7 +70,7 @@ jobs:
             --document-name "AWS-RunShellScript" \
             --targets "Key=instanceIds,Values=$INSTANCE_LIST" \
             --comment "Pull Docker image and run it on EC2 instances" \
-            --parameters '{"commands":["aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS  --password-stdin ${{ steps.login-aws-ecr.outputs.registry }}","docker pull ${{ steps.login-aws-ecr.outputs.registry }}/${{ secrets.AWS_ECR_REPO }}:latest","docker stop ${{ vars.CONTAINER_NAME }} || true","docker rm ${{ vars.CONTAINER_NAME }} || true","docker run -d --name ${{ vars.CONTAINER_NAME }} -p 3000:3000 ${{ steps.login-aws-ecr.outputs.registry }}/${{ secrets.AWS_ECR_REPO }}:latest"]}' \
+            --parameters '{"commands":["aws ecr get-login-password --region ap-southeast-2 | docker login --username AWS  --password-stdin ${{ steps.login-aws-ecr.outputs.registry }}","docker stop ${{ vars.CONTAINER_NAME }} || true","docker pull ${{ steps.login-aws-ecr.outputs.registry }}/${{ secrets.AWS_ECR_REPO }}:latest","docker run --rm -d --name ${{ vars.CONTAINER_NAME }} -p 3000:3000 ${{ steps.login-aws-ecr.outputs.registry }}/${{ secrets.AWS_ECR_REPO }}:latest"]}' \
             --query "Command.CommandId" --output text)
 
              for instance in "${INSTANCES[@]}"; do
